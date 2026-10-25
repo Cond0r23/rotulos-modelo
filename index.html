@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+
+<!-- =====================================================================
+     CONFIGURACIÓN DEL CLIENTE: lo único que hay que editar en cada clon.
+     El logo va en el archivo logo.png, en la misma carpeta que este index.html
+     (también se reemplazan apple-touch-icon.png y favicon.png).
+     ===================================================================== -->
+<script>
+window.CLIENTE = {
+  nombre:    "Agencia PIRULO",
+  color:     "#FF0000",
+  subtitulo: "Generador de etiquetas para hojas autoadhesivas marca Húsares H34108 + código de barras Code 128 · by Cond0r",
+  registro:  "",
+  marcaAgua: 0.17,
+  creador:   "by Cond0r",
+  asunto:    "{guia}",
+  sello:     "PRUEBA"
+};
+// nombre:    aparece en el título, por ejemplo "Rótulos DHL"
+// color:     color del nombre y de la barra del celular, en formato #RRGGBB
+// subtitulo: texto debajo del título ("" para no mostrar nada)
+// registro:  URL de la aplicación web de Google Apps Script (termina en /exec); "" para no registrar
+// marcaAgua: intensidad del logo en los rótulos: 0 = sin marca de agua, 0.17 = suave, 1 = colores originales
+// creador:   campo "Creador" en las propiedades del PDF
+// asunto:    campo "Asunto" en las propiedades del PDF; {guia} se reemplaza por el número de guía
+// sello:     texto grande en diagonal detrás de los rótulos en cada hoja del PDF; "" para no mostrarlo
+</script>
+<!-- ===================================================================== -->
+
+<title>Rótulos</title>
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
+<meta name="apple-mobile-web-app-title" content="Rótulos">
+<meta name="theme-color" content="#1f2f7a">
+<style>html{color-scheme:light dark}body{margin:0;font:14px/1.45 system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: una columna, formulario arriba e historial de PDFs debajo */
+:root{
+  --bg:#f6f6f4; --panel:#ffffff; --ink:#16181d; --muted:#5d6270; --line:#d9dade; --brand:var(--brand-cfg,#1f2f7a);
+  --accent:#d7141a; --accent-ink:#ffffff; --ok:#1f7a45; --warn:#b45309; --field:#ffffff;
+  --label-paper:#ffffff; --label-ink:#000000; --label-hi:#333333;
+  --f-display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121317; --panel:#1b1d23; --ink:#ececef; --muted:#9ea2ad; --line:#33363f;
+  --accent:#ff4a4f; --accent-ink:#16181d; --brand:var(--brand-cfg-dark,#9fb1ff); --ok:#4ccb83; --warn:#f0a14a; --field:#121317; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121317; --panel:#1b1d23; --ink:#ececef; --muted:#9ea2ad; --line:#33363f;
+  --accent:#ff4a4f; --accent-ink:#16181d; --brand:var(--brand-cfg-dark,#9fb1ff); --ok:#4ccb83; --warn:#f0a14a; --field:#121317; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+.wrap{max-width:560px;margin:0 auto;padding-block:20px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
+header>div{min-width:0}
+h1{font-family:var(--f-display);font-weight:700;font-size:2rem;letter-spacing:.01em;margin:0;text-wrap:balance}
+h1 span{color:var(--brand)}
+.sub{color:var(--muted);margin:0}
+.brand{height:44px;width:auto;max-width:40%;object-fit:contain;flex:none;background:#fff;border-radius:4px;padding:4px 8px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.hhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.hhead h2{font-family:var(--f-display);font-weight:600;font-size:1.2rem;margin:0;letter-spacing:.02em}
+.hist{list-style:none;margin:0;padding:0;display:grid}
+.hist li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.hist li:first-child{border-top:0}
+.hist .hinfo{display:grid;gap:2px;min-width:0}
+.hist b{font-family:var(--f-mono);font-weight:600;font-size:.95rem}
+.hist .hinfo span,.hist small{color:var(--muted);font-size:.8rem}
+.hist .hact{display:flex;gap:6px}
+.hist .hempty{color:var(--muted);font-size:.85rem;display:block}
+.btn.danger{color:var(--accent);border-color:var(--accent)}
+.summary{font-family:var(--f-mono);font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums;min-height:1.2em}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px;min-width:0}
+fieldset{border:0;margin:0;padding:0;display:grid;gap:14px}
+.sec{font-family:var(--f-display);font-weight:600;font-size:.95rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  border-top:1px solid var(--line);padding-top:12px;margin-top:4px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.f{display:grid;gap:4px;min-width:0;align-content:start}
+.f label,.lbl{font-size:.78rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+input[type=text],input[type=number],select{width:100%;font:inherit;font-family:var(--f-mono);font-weight:500;font-size:1rem;
+  color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:4px;padding:8px 10px;text-transform:uppercase}
+input:focus-visible,select:focus-visible,button:focus-visible,.seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:1px}
+input.bad{border-color:var(--accent)}
+input::placeholder{color:var(--muted);opacity:.55}
+.hint{font-size:.78rem;color:var(--muted);min-height:1.1em}
+.hint.err{color:var(--accent)}
+.hint.ok{color:var(--ok)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;width:max-content}
+.seg label{display:block;cursor:pointer;position:relative;-webkit-tap-highlight-color:transparent}
+.seg label+label{border-left:1px solid var(--line)}
+.seg input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;appearance:none;pointer-events:none}
+.seg span{display:block;padding:8px 18px;font-family:var(--f-mono);font-weight:600;font-size:1rem;line-height:1.45}
+.seg input:checked+span{background:var(--ink);color:var(--bg)}
+.houses{display:grid;gap:10px}
+.hrow{display:grid;grid-template-columns:minmax(0,1fr) auto 90px;gap:8px;align-items:end}
+.hrow .num{font-family:var(--f-mono);font-size:.75rem;color:var(--muted)}
+.tally{display:flex;justify-content:space-between;align-items:center;font-family:var(--f-mono);font-size:.85rem;padding:8px 10px;
+  border-radius:4px;background:var(--bg);font-variant-numeric:tabular-nums}
+.tally b.ok{color:var(--ok)} .tally b.warn{color:var(--warn)} .tally b.err{color:var(--accent)}
+.btn{font:inherit;font-weight:600;border-radius:4px;padding:10px 16px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-size:1rem;width:100%}
+.btn.small{padding:6px 10px;font-size:.8rem}
+.actions{display:grid;gap:8px}
+.errors{margin:0;padding-left:18px;color:var(--accent);font-size:.85rem}
+.status{font-size:.85rem;color:var(--ok);min-height:1.2em}
+@media (prefers-reduced-motion:no-preference){.btn{transition:filter .15s}.btn:hover{filter:brightness(1.07)}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Rótulos <span id="brandName"></span></h1>
+      <p class="sub" id="subtitle"></p>
+    </div>
+    <img class="brand" id="brandLogo" alt="" hidden>
+  </header>
+
+  <div class="grid">
+    <form class="panel" id="form" novalidate>
+      <fieldset>
+        <div class="f">
+          <label for="awb">Número de guía (AWB)</label>
+          <input type="text" id="awb" inputmode="numeric" maxlength="12" placeholder="045-12345675" autocomplete="off">
+          <div class="hint" id="awbHint">3 dígitos de prefijo, guion y 8 dígitos con dígito verificador.</div>
+        </div>
+
+        <div class="row">
+          <div class="f">
+            <label for="pcs">Piezas</label>
+            <input type="number" id="pcs" min="1" max="9999" step="1" inputmode="numeric" pattern="[0-9]*" placeholder="4">
+            <div class="hint" id="pcsHint"></div>
+          </div>
+          <div class="f">
+            <span class="lbl" id="consolLbl">¿Consol?</span>
+            <div class="seg" role="radiogroup" aria-labelledby="consolLbl">
+              <label><input type="radio" name="consol" id="consolSi" value="SI"><span>SI</span></label>
+              <label><input type="radio" name="consol" id="consolNo" value="NO" checked><span>NO</span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="f">
+            <label for="org">Origen</label>
+            <input type="text" id="org" maxlength="3" placeholder="COR" autocomplete="off">
+            <div class="hint" id="orgHint"></div>
+          </div>
+          <div class="f">
+            <label for="des">Destino</label>
+            <input type="text" id="des" maxlength="3" placeholder="HKG" autocomplete="off">
+            <div class="hint" id="desHint"></div>
+          </div>
+        </div>
+
+        <div id="consolBox" hidden>
+          <div class="sec">Houses</div>
+          <div class="houses" id="houses"></div>
+          <div class="tally" id="tally"></div>
+        </div>
+
+        <div class="actions">
+          <ul class="errors" id="errors" hidden></ul>
+          <div class="summary" id="pinfo"></div>
+          <button type="submit" class="btn primary" id="btnPdf">Generar PDF</button>
+          <button type="button" class="btn" id="btnClear">Nueva guía (limpiar formulario)</button>
+          <div class="status" id="status" role="status"></div>        </div>
+      </fieldset>
+    </form>
+
+    <section class="panel" aria-labelledby="histTitle">
+      <div class="hhead"><h2 id="histTitle">Historial de PDFs</h2>
+        <button type="button" class="btn small" id="btnHistClear" hidden>Borrar historial</button></div>
+      <ul class="hist" id="hist"></ul>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+// Hoja A4 en mm. Ajustar acá márgenes y tamaños de rótulo.
+const LAYOUT = { pageW:210, pageH:297, labelW:92, labelH:57, left:9, gapX:8, top:19.5, gapY:10, perPage:4 };
+// Alturas de filas del rótulo, como fracción de labelH (tomadas del modelo)
+const ROWS = { awb:.213, hdr:.080, val:.161, house:.187 }; // el resto es la fila del código de barras
+const COLS = { pcs:.132, cnt:.143 };
+// Sin consol no hay fila HOUSE: las demás filas crecen en proporción
+function rowFracs(consol){
+  const k = consol ? 1 : 1/(1-ROWS.house);
+  return { awb:ROWS.awb*k, hdr:ROWS.hdr*k, val:ROWS.val*k, house:consol ? ROWS.house : 0 };
+}
+
+/* ---------- Código de barras Code 128 (set C, solo dígitos) ---------- */
+// Patrones de anchos barra/espacio para los valores 0..105; STOP aparte
+const C128 = ("212222 222122 222221 121223 121322 131222 122213 122312 132212 221213 221312 231212 112232 122132 122231 113222 " +
+  "123122 123221 223211 221132 221231 213212 223112 312131 311222 321122 321221 312212 322112 322211 212123 212321 " +
+  "232121 111323 131123 131321 112313 132113 132311 211313 231113 231311 112133 112331 132131 113123 113321 133121 " +
+  "313121 211331 231131 213113 213311 213131 311123 311321 331121 312113 312311 332111 314111 221411 431111 111224 " +
+  "111422 121124 121421 141122 141221 112214 112412 122114 122411 142112 142211 241211 221114 413111 241112 134111 " +
+  "111242 121142 121241 114212 124112 124211 411212 421112 421211 212141 214121 412121 111143 111341 131141 114113 " +
+  "114311 411113 411311 113141 114131 311141 411131 211412 211214 211232").split(" ");
+const C128_STOP = "2331112", C128_START_C = 105;
+// 16 dígitos IATA: prefijo (3) + guía (8) + separador 0 + número de pieza (4)
+function barcodeData(awb, seq){ return awb.replace("-","") + "0" + String(seq).padStart(4,"0"); }
+function code128C(digits){
+  const vals = [C128_START_C];
+  for(let i=0;i<digits.length;i+=2) vals.push(+digits.substr(i,2));
+  let sum = C128_START_C;
+  for(let i=1;i<vals.length;i++) sum += vals[i]*i;
+  vals.push(sum % 103);
+  return vals.map(v=>C128[v]).join("") + C128_STOP;
+}
+// Barras como [x, ancho] en módulos, y ancho total en módulos
+function barRects(digits){
+  const pat = code128C(digits), rects = [];
+  let x = 0;
+  for(let i=0;i<pat.length;i++){ const w = +pat[i]; if(i%2===0) rects.push([x,w]); x += w; }
+  return { rects, total:x };
+}
+
+const $ = id => document.getElementById(id);
+
+/* ---------- Configuración del cliente (bloque CLIENTE al principio del archivo) ---------- */
+const CFG = Object.assign({ nombre:"", color:"#1f2f7a", subtitulo:"", registro:"", marcaAgua:0.17, creador:"", asunto:"", sello:"", logo:"logo.png" }, window.CLIENTE || {});
+// Versión clara del color para el modo oscuro
+function mixWhite(hex, k){
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if(!m) return "#9fb1ff";
+  const n = parseInt(m[1],16), ch = s => Math.round(((n>>s)&255) + (255-((n>>s)&255))*k);
+  return "#" + [16,8,0].map(s=>ch(s).toString(16).padStart(2,"0")).join("");
+}
+(function applyClient(){
+  if(/^#[0-9a-f]{6}$/i.test(CFG.color)){
+    document.documentElement.style.setProperty("--brand-cfg", CFG.color);
+    document.documentElement.style.setProperty("--brand-cfg-dark", mixWhite(CFG.color, .55));
+    const tc = document.querySelector('meta[name="theme-color"]'); if(tc) tc.content = CFG.color;
+  }
+  $("brandName").textContent = CFG.nombre;
+  $("subtitle").textContent = CFG.subtitulo; $("subtitle").hidden = !CFG.subtitulo;
+  document.title = CFG.nombre ? "Rótulos " + CFG.nombre : "Rótulos";
+  const bl = $("brandLogo");
+  bl.alt = CFG.nombre;
+  bl.onload = () => { bl.hidden = false; };
+  bl.onerror = () => { bl.hidden = true; };
+  bl.src = CFG.logo;
+})();
+const store = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
+};
+const downloadsP = (window.claude && window.claude.use) ? window.claude.use("downloads").catch(()=>null) : Promise.resolve(null);
+
+
+/* ---------- Validación AWB IATA ---------- */
+function checkAwb(v){
+  if(!/^\d{3}-\d{8}$/.test(v)) return {ok:false,msg:"Formato: 3 dígitos, guion y 8 dígitos (ej. 045-12345675)."};
+  const serial = v.slice(4), base = +serial.slice(0,7), cd = +serial[7];
+  if(base % 7 !== cd) return {ok:false,msg:`Dígito verificador inválido: con ${serial.slice(0,7)} debería terminar en ${base%7}.`};
+  return {ok:true};
+}
+function fmtAwb(raw){
+  const d = raw.replace(/\D/g,"").slice(0,11);
+  return d.length>3 ? d.slice(0,3)+"-"+d.slice(3) : d;
+}
+
+/* ---------- Houses ---------- */
+const housesEl = $("houses");
+function isConsol(){ return $("consolSi").checked; }
+function totalPcs(){ const n = parseInt($("pcs").value,10); return n>0 ? n : 0; }
+function totalSi(){ const r = housesEl.querySelector('input[name="hTotal"]:checked'); return r ? r.value==="SI" : false; }
+
+function makeHouseRow(idx){
+  const row = document.createElement("div");
+  row.className = "hrow";
+  const n = idx+1;
+  row.innerHTML = `
+    <div class="f"><label for="h${n}">House ${n}</label>
+      <input type="text" id="h${n}" class="hNum" maxlength="12" autocomplete="off" placeholder="1234-5678"></div>
+    ${idx===0 ? `<div class="f"><span class="lbl" id="hTotLbl">¿Total?</span>
+      <div class="seg" role="radiogroup" aria-labelledby="hTotLbl">
+        <label><input type="radio" name="hTotal" id="hTotSi" value="SI" checked><span>SI</span></label>
+        <label><input type="radio" name="hTotal" id="hTotNo" value="NO"><span>NO</span></label></div></div>`
+      : `<div class="num">de la guía</div>`}
+    <div class="f hp"><label for="hp${n}">Piezas</label>
+      <input type="number" id="hp${n}" class="hPcs" min="1" step="1" inputmode="numeric" pattern="[0-9]*"></div>`;
+  return row;
+}
+function rows(){ return [...housesEl.children]; }
+function rowData(r){
+  return { house:r.querySelector(".hNum").value.trim().toUpperCase(), pcs:parseInt(r.querySelector(".hPcs").value,10)||0 };
+}
+function syncHouses(){
+  if(!housesEl.children.length) housesEl.appendChild(makeHouseRow(0));
+  const first = rows()[0];
+  const tot = totalPcs();
+  if(totalSi()){
+    rows().slice(1).forEach(r=>r.remove());
+    first.querySelector(".hp").hidden = true;
+  } else {
+    first.querySelector(".hp").hidden = false;
+    // quitar filas vacías sobrantes al final
+    let rs = rows();
+    const sumOf = list => list.reduce((s,r)=>s+rowData(r).pcs,0);
+    while(rs.length>1){
+      const last = rs[rs.length-1], d = rowData(last);
+      const prevSum = sumOf(rs.slice(0,-1));
+      const prevIncomplete = rs.slice(0,-1).some(r=>!rowData(r).pcs);
+      if(!d.house && !d.pcs && (prevSum>=tot || prevIncomplete)){ last.remove(); rs = rows(); }
+      else break;
+    }
+    // agregar fila si la suma no alcanza el total
+    rs = rows();
+    if(tot && rs.every(r=>rowData(r).pcs>0) && sumOf(rs) < tot) housesEl.appendChild(makeHouseRow(rs.length));
+  }
+  renderTally();
+}
+function getHouses(){
+  if(totalSi()) return [{house:rowData(rows()[0]).house, pcs:totalPcs()}];
+  return rows().map(rowData).filter(d=>d.house||d.pcs);
+}
+function renderTally(){
+  const tot = totalPcs(), hs = getHouses(), sum = hs.reduce((s,h)=>s+h.pcs,0);
+  let cls = "ok", txt = "Completo";
+  if(sum>tot){ cls="err"; txt=`Sobran ${sum-tot}`; }
+  else if(sum<tot){ cls="warn"; txt=`Faltan ${tot-sum}`; }
+  $("tally").innerHTML = `<span>Asignadas ${sum} de ${tot} piezas</span><b class="${cls}">${txt}</b>`;
+}
+
+/* ---------- Lectura y validación ---------- */
+function readForm(){
+  const awb = $("awb").value.trim();
+  const tot = totalPcs();
+  const org = $("org").value.trim().toUpperCase(), des = $("des").value.trim().toUpperCase();
+  const consol = isConsol();
+  const houses = consol ? getHouses() : [{house:"", pcs:tot}];
+  const errs = [];
+  const a = checkAwb(awb); if(!a.ok) errs.push("Guía: "+a.msg);
+  if(!tot) errs.push("Indicá la cantidad de piezas.");
+  if(!/^[A-Z]{3}$/.test(org)) errs.push("Origen: código IATA de 3 letras.");
+  if(!/^[A-Z]{3}$/.test(des)) errs.push("Destino: código IATA de 3 letras.");
+  if(consol){
+    if(houses.some(h=>!h.house)) errs.push("Completá el número de cada house.");
+    if(houses.some(h=>!h.pcs)) errs.push("Indicá las piezas de cada house.");
+    const sum = houses.reduce((s,h)=>s+h.pcs,0);
+    if(tot && sum!==tot) errs.push(`La suma de piezas de las houses (${sum}) debe ser igual al total de la guía (${tot}).`);
+  }
+  return { awb, tot, org, des, consol, houses, errs };
+}
+function pieceList(d){
+  const out = []; let g = 0;
+  for(const h of d.houses){
+    for(let i=1;i<=h.pcs;i++){
+      g++;
+      out.push({ house:h.house, pcsCell:d.tot, seq:g, n:i, of:h.pcs });
+    }
+  }
+  return out;
+}
+
+function setHint(id, msg, kind){ const el=$(id); el.textContent = msg; el.className = "hint"+(kind?" "+kind:""); }
+function liveHints(){
+  const awb = $("awb").value.trim();
+  if(!awb){ setHint("awbHint","3 dígitos de prefijo, guion y 8 dígitos con dígito verificador."); $("awb").classList.remove("bad"); }
+  else { const r = checkAwb(awb); $("awb").classList.toggle("bad", !r.ok && awb.length===12);
+    setHint("awbHint", r.ok ? "Guía válida" : (awb.length===12 ? r.msg : "Formato: 000-00000000"), r.ok ? "ok" : (awb.length===12?"err":"")); }
+  for(const id of ["org","des"]){
+    const v=$(id).value.trim(); const ok=/^[A-Z]{3}$/i.test(v);
+    $(id).classList.toggle("bad", v.length===3 && !ok);
+    setHint(id+"Hint", v && !ok && v.length===3 ? "Solo letras" : "", v && !ok ? "err":"");
+  }
+}
+
+/* ---------- Resumen ---------- */
+const esc = s => String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+/* ---------- PDF ---------- */
+const GRAY = [51,51,51], BLACK = [0,0,0];
+const PT = 0.3528; // mm por punto
+function fitSize(doc, text, maxW, boxH, fill){
+  let size = (boxH*fill)/(PT*0.72);
+  doc.setFontSize(size);
+  const w = doc.getTextWidth(text);
+  if(w>maxW) size *= maxW/w;
+  return size;
+}
+function txt(doc, text, cx, cy, size, color, style){
+  doc.setFont("helvetica", style||"bold"); doc.setFontSize(size); doc.setTextColor(...color);
+  doc.text(String(text), cx, cy, {align:"center", baseline:"middle"});
+}
+function fitText(doc, text, x, y, w, h, color, style, fill){
+  doc.setFont("helvetica", style||"bold");
+  const s = fitSize(doc, String(text), w*0.9, h, fill||.62);
+  txt(doc, text, x+w/2, y+h/2+0.3, s, color, style);
+}
+function drawLabel(doc, x, y, d, p){
+  const W = LAYOUT.labelW, H = LAYOUT.labelH, r = rowFracs(d.consol);
+  const hAwb = H*r.awb, hHdr = H*r.hdr, hVal = H*r.val, hHouse = H*r.house;
+  const yHdr = y+hAwb, yVal = yHdr+hHdr, yHouse = yVal+hVal, yBot = yHouse+hHouse, hBot = y+H-yBot;
+  const xPcs = x+W-W*COLS.pcs, xMid = x+W/2, xCnt = x+W-W*COLS.cnt, yPcsVal = y+hAwb*.38;
+
+  // marca de agua: centrada en las tres primeras líneas, detrás de textos y líneas
+  if(watermark){
+    const zh = yBot-y, s = Math.min(W*0.85/watermark.w, zh*0.8/watermark.h);
+    const iw = watermark.w*s, ih = watermark.h*s;
+    doc.addImage(watermark.url, "PNG", x+(W-iw)/2, y+(zh-ih)/2, iw, ih, "wm", "FAST");
+  }
+
+  doc.setDrawColor(...BLACK);
+  doc.setLineWidth(0.3);
+  doc.line(x,yHdr,x+W,yHdr); doc.line(x,yVal,x+W,yVal); doc.line(x,yHouse,x+W,yHouse);
+  if(d.consol) doc.line(x,yBot,x+W,yBot);
+  doc.line(xPcs,y,xPcs,yHdr); doc.line(xPcs,yPcsVal,x+W,yPcsVal);
+  doc.line(xMid,yHdr,xMid,yHouse);
+  doc.line(xCnt,yBot,xCnt,y+H);
+  doc.setLineWidth(0.6); doc.rect(x,y,W,H);
+
+  // 1ra línea: master + total de piezas de la master
+  fitText(doc, d.awb, x, y, xPcs-x, hAwb, GRAY, "bold", d.consol ? .62 : .55);
+  fitText(doc, "PCS", xPcs, y, x+W-xPcs, yPcsVal-y, BLACK, "normal", .6);
+  fitText(doc, p.pcsCell, xPcs, yPcsVal, x+W-xPcs, y+hAwb-yPcsVal, GRAY, "bold", .62);
+  // 2da línea: origen y destino
+  fitText(doc, "ORIGIN", x, yHdr, W/2, hHdr, BLACK, "normal", .55);
+  fitText(doc, "DESTINATION", xMid, yHdr, W/2, hHdr, BLACK, "normal", .55);
+  fitText(doc, d.org, x, yVal, W/2, hVal, GRAY, "bold", .66);
+  fitText(doc, d.des, xMid, yVal, W/2, hVal, GRAY, "bold", .66);
+  // 3ra línea: house
+  if(d.consol){
+    doc.setFont("helvetica","normal");
+    let s = fitSize(doc, "HOUSE:  "+p.house, W*0.88, hHouse, .6);
+    doc.setFontSize(s);
+    const wl = doc.getTextWidth("HOUSE:  "), wv = doc.getTextWidth(p.house);
+    const sx = x + (W-(wl+wv))/2, cy = yHouse+hHouse/2+0.3;
+    doc.setTextColor(...BLACK); doc.text("HOUSE:", sx, cy, {baseline:"middle"});
+    doc.setTextColor(...GRAY); doc.text(p.house, sx+wl, cy, {baseline:"middle"});
+  }
+
+  // 4ta línea: contador X DE Y de la house
+  const cw = x+W-xCnt;
+  fitText(doc, p.n, xCnt, yBot, cw, hBot*.38, GRAY, "bold", .62);
+  fitText(doc, "DE", xCnt, yBot+hBot*.38, cw, hBot*.24, BLACK, "normal", .55);
+  fitText(doc, p.of, xCnt, yBot+hBot*.62, cw, hBot*.38, GRAY, "bold", .62);
+
+  // código de barras Code 128, centrado con zona de silencio de 10 módulos por lado
+  const bcW = xCnt-x, data = barcodeData(d.awb, p.seq);
+  const { rects, total } = barRects(data);
+  const mod = (bcW-2) / (total+20);
+  const bx = x + (bcW-total*mod)/2, by = yBot + hBot*0.1, bh = hBot*0.6;
+  doc.setFillColor(0,0,0);
+  rects.forEach(r=>doc.rect(bx+r[0]*mod, by, r[1]*mod, bh, "F"));
+  fitText(doc, data, x, by+bh, bcW, hBot*0.25, BLACK, "normal", .55);
+}
+// Sello en diagonal (de abajo a la izquierda hacia arriba a la derecha) que cruza toda la hoja, detrás de los rótulos
+const STAMP_GRAY = [200,200,200];
+function drawPageStamp(doc){
+  const t = String(CFG.sello || "").trim(); if(!t) return;
+  const W = LAYOUT.pageW, H = LAYOUT.pageH, ang = Math.atan2(H, W), c = Math.cos(ang), s = Math.sin(ang);
+  doc.setFont("helvetica","bold"); doc.setFontSize(100);
+  const size = 100 * (Math.hypot(W,H)*0.78) / doc.getTextWidth(t); // ocupa el 78% de la diagonal
+  doc.setFontSize(size);
+  const w = doc.getTextWidth(t), capH = size*PT*0.72;
+  // punto de inicio del texto para que quede centrado en la hoja una vez girado
+  const x = W/2 + s*capH/2 - c*w/2, y = H/2 + c*capH/2 + s*w/2;
+  doc.setTextColor(...STAMP_GRAY);
+  doc.text(t, x, y, { angle: ang*180/Math.PI });
+}
+function buildPdf(d){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:"mm", format:"a4", orientation:"portrait" });
+  const L = LAYOUT;
+  pieceList(d).forEach((p,i)=>{
+    const slot = i % L.perPage;
+    if(i && !slot) doc.addPage();
+    if(!slot) drawPageStamp(doc);
+    const y = L.top + slot*(L.labelH+L.gapY);
+    drawLabel(doc, L.left, y, d, p);
+    drawLabel(doc, L.left+L.labelW+L.gapX, y, d, p);
+  });
+  doc.setProperties({
+    title: "Rótulos " + d.awb,
+    subject: String(CFG.asunto || "").replace(/\{guia\}/g, d.awb),
+    author: CFG.nombre || "",
+    creator: CFG.creador || ""
+  });
+  return doc;
+}
+
+$("form").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const d = readForm();
+  const errEl = $("errors");
+  $("status").textContent = "";
+  if(d.errs.length){ errEl.innerHTML = d.errs.map(x=>`<li>${esc(x)}</li>`).join(""); errEl.hidden = false; return; }
+  errEl.hidden = true;
+  if(await savePdf(d, "Nuevo")) histAdd(d);
+});
+
+// Genera y descarga el PDF; devuelve true si se descargó
+async function savePdf(d, accion){
+  if(!window.jspdf){ $("status").textContent = "No se pudo cargar el generador de PDF. Revisá la conexión y recargá la página."; return false; }
+  const doc = buildPdf(d);
+  const filename = `ROTULOS_${d.awb}.pdf`;
+  const dl = await downloadsP;
+  // Registrar antes de descargar: en iPhone la descarga puede salir de la página y cortar el envío
+  logUse(d, accion);
+  try{
+    if(dl){ await dl.save({ filename, data: doc.output("blob") }); }
+    else { doc.save(filename); }
+    $("status").textContent = `PDF listo: ${filename}`;
+    return true;
+  }catch(err){
+    const c = err && err.code;
+    $("status").textContent = c==="declined" ? "Descarga cancelada." :
+      c==="rate_limited" ? "Ya hay una descarga pendiente; confirmala o esperá un momento." :
+      "No se pudo descargar el PDF en esta vista.";
+    return false;
+  }
+}
+
+/* ---------- Registro de uso en Google Sheets ---------- */
+// Solo se activa si CLIENTE.registro tiene la URL del Apps Script.
+// Se guarda la provincia y ciudad aproximadas según la conexión; la IP no se registra.
+const LOG_URL = /^https:\/\/script\.google\.com\//.test(CFG.registro || "") ? CFG.registro : "";
+let geoP = null, geoNow = null;
+function withTimeout(p, ms){ return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")), ms))]); }
+function getGeo(){
+  if(geoP) return geoP;
+  const ipwho = () => withTimeout(fetch("https://ipwho.is/?lang=es&fields=success,country,region,city").then(r=>r.json()), 5000)
+    .then(j=>{ if(!j.success) throw new Error("ipwho"); return { pais:j.country||"", provincia:j.region||"", ciudad:j.city||"" }; });
+  const ipapi = () => withTimeout(fetch("https://ipapi.co/json/").then(r=>r.json()), 5000)
+    .then(j=>{ if(j.error) throw new Error("ipapi"); return { pais:j.country_name||"", provincia:j.region||"", ciudad:j.city||"" }; });
+  return geoP = ipwho().catch(ipapi).catch(()=>({ pais:"", provincia:"Desconocida", ciudad:"" })).then(g=>(geoNow = g));
+}
+function deviceName(){
+  const u = navigator.userAgent;
+  return /iPhone|iPad/.test(u) ? "iPhone/iPad" : /Android/.test(u) ? "Android" : /Windows/.test(u) ? "Windows" : /Mac/.test(u) ? "Mac" : "Otro";
+}
+function logUse(d, accion){
+  if(!LOG_URL) return;
+  try{
+    // la ubicación se pide al abrir la página; no se espera acá para no perder el toque del usuario (iPhone bloquea la descarga)
+    const g = geoNow || { pais:"", provincia:"Desconocida", ciudad:"" };
+    const n = pieceList(d).length;
+    const json = JSON.stringify({ ...g, accion, guia:d.awb, piezas:d.tot, origen:d.org, destino:d.des, consol:d.consol ? "SI" : "NO",
+      houses: d.consol ? d.houses.map(h=>`${h.house} (${h.pcs})`).join("; ") : "",
+      rotulos:n*2, hojas:Math.ceil(n/LAYOUT.perPage), dispositivo:deviceName() });
+    // sendBeacon termina el envío aunque el navegador salga de la página (Safari en iPhone)
+    const sent = navigator.sendBeacon && navigator.sendBeacon(LOG_URL, new Blob([json], { type:"text/plain;charset=utf-8" }));
+    if(!sent) fetch(LOG_URL, { method:"POST", mode:"no-cors", keepalive:true, headers:{ "Content-Type":"text/plain;charset=utf-8" }, body:json });
+  }catch(e){ /* el registro nunca bloquea la generación del PDF */ }
+}
+if(LOG_URL) getGeo();
+
+/* ---------- Historial (guardado en este navegador) ---------- */
+const HIST_KEY = "rotulos.historial", HIST_MAX = 50;
+function histLoad(){ try{ return JSON.parse(store.get(HIST_KEY) || "[]"); }catch(e){ return []; } }
+function histSave(list){ store.set(HIST_KEY, JSON.stringify(list.slice(0,HIST_MAX))); renderHist(); }
+function histAdd(d){
+  const list = histLoad();
+  list.unshift({ at:Date.now(), awb:d.awb, tot:d.tot, org:d.org, des:d.des, consol:d.consol, houses:d.houses });
+  histSave(list);
+}
+function renderHist(){
+  const list = histLoad();
+  $("btnHistClear").hidden = !list.length;
+  if(!list.length){
+    $("hist").innerHTML = `<li class="hempty">Todavía no generaste PDFs en este navegador. Cada PDF que generes aparece acá para volver a descargarlo o cargarlo en el formulario.</li>`;
+    return;
+  }
+  $("hist").innerHTML = list.map((h,i)=>{
+    const when = new Date(h.at).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"});
+    const hs = h.consol ? ` · ${h.houses.length} ${h.houses.length===1?"house":"houses"}` : "";
+    return `<li><div class="hinfo"><b>${esc(h.awb)}</b>
+        <span>${esc(h.org)} → ${esc(h.des)} · ${h.tot} pzs${hs}</span><small>${when}</small></div>
+      <div class="hact"><button type="button" class="btn small" data-act="pdf" data-i="${i}">Descargar</button>
+        <button type="button" class="btn small" data-act="load" data-i="${i}">Cargar</button>
+        <button type="button" class="btn small" data-act="del" data-i="${i}" aria-label="Eliminar del historial">✕</button></div></li>`;
+  }).join("");
+}
+function loadIntoForm(h){
+  $("awb").value = h.awb; $("pcs").value = h.tot; $("org").value = h.org; $("des").value = h.des;
+  $(h.consol ? "consolSi" : "consolNo").checked = true;
+  housesEl.innerHTML = ""; housesEl.appendChild(makeHouseRow(0));
+  if(h.consol){
+    $(h.houses.length===1 ? "hTotSi" : "hTotNo").checked = true;
+    h.houses.forEach((x,i)=>{
+      if(!$("h"+(i+1))) housesEl.appendChild(makeHouseRow(i));
+      $("h"+(i+1)).value = x.house; $("hp"+(i+1)).value = x.pcs;
+    });
+  }
+  $("errors").hidden = true; $("status").textContent = "";
+  update(); window.scrollTo({ top:0, behavior:"smooth" });
+}
+$("hist").addEventListener("click", async e=>{
+  const b = e.target.closest("button[data-act]"); if(!b) return;
+  const list = histLoad(), h = list[+b.dataset.i]; if(!h) return;
+  if(b.dataset.act==="pdf") await savePdf(h, "Re-descarga");
+  else if(b.dataset.act==="load") loadIntoForm(h);
+  else { list.splice(+b.dataset.i,1); histSave(list); }
+});
+// Borrar todo pide un segundo clic para confirmar
+let clearTimer = null;
+$("btnHistClear").addEventListener("click", e=>{
+  const b = e.currentTarget;
+  if(!clearTimer){
+    b.textContent = "Confirmar borrado"; b.classList.add("danger");
+    clearTimer = setTimeout(()=>{ clearTimer = null; b.textContent = "Borrar historial"; b.classList.remove("danger"); }, 4000);
+    return;
+  }
+  clearTimeout(clearTimer); clearTimer = null;
+  b.textContent = "Borrar historial"; b.classList.remove("danger");
+  histSave([]);
+});
+
+/* ---------- Eventos ---------- */
+function update(){
+  $("consolBox").hidden = !isConsol();
+  if(isConsol()) syncHouses();
+  liveHints();
+  const n = pieceList(readForm()).length, pages = Math.ceil(n/LAYOUT.perPage);
+  $("pinfo").textContent = n ? `${n} piezas · ${n*2} rótulos · ${pages} ${pages===1?"hoja":"hojas"} A4` : "";
+}
+$("awb").addEventListener("input", e=>{
+  e.target.value = fmtAwb(e.target.value);
+  update();
+});
+for(const id of ["org","des"]) $(id).addEventListener("input", e=>{ e.target.value = e.target.value.replace(/[^a-z]/gi,"").toUpperCase(); update(); });
+$("form").addEventListener("input", e=>{ if(!["awb","org","des"].includes(e.target.id)) update(); });
+$("form").addEventListener("change", e=>{ if(e.target.type==="radio" || e.target.tagName==="SELECT") update(); });
+housesEl.addEventListener("input", e=>{ if(e.target.classList.contains("hNum")) e.target.value = e.target.value.toUpperCase(); });
+
+$("btnClear").addEventListener("click", ()=>{
+  $("form").reset(); housesEl.innerHTML = "";
+  $("errors").hidden = true; $("status").textContent = "";
+  update(); window.scrollTo({ top:0, behavior:"smooth" }); $("awb").focus();
+});
+
+/* ---------- Marca de agua ---------- */
+const WM_STRENGTH = Math.min(1, Math.max(0, +CFG.marcaAgua || 0)); // de CLIENTE.marcaAgua
+let watermark = null; // {url,w,h}: logo recortado y aclarado sobre blanco
+(function loadWatermark(){
+  if(!CFG.logo || !WM_STRENGTH) return;
+  const img = new Image();
+  img.onload = () => {
+    let sx = 0, sy = 0, w = img.naturalWidth, h = img.naturalHeight;
+    // Recorta los bordes blancos o transparentes del logo para que quede centrado en el rótulo
+    try{
+      const t = document.createElement("canvas"); t.width = w; t.height = h;
+      const tg = t.getContext("2d"); tg.drawImage(img,0,0);
+      const px = tg.getImageData(0,0,w,h).data;
+      let x0 = w, y0 = h, x1 = -1, y1 = -1;
+      for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+        const i = (y*w+x)*4;
+        if(px[i+3]>20 && (px[i]<235 || px[i+1]<235 || px[i+2]<235)){
+          if(x<x0) x0=x; if(x>x1) x1=x; if(y<y0) y0=y; if(y>y1) y1=y;
+        }
+      }
+      if(x1>=0){ sx = x0; sy = y0; w = x1-x0+1; h = y1-y0+1; }
+    }catch(e){ /* sin recorte si el navegador no permite leer la imagen */ }
+    // Limita la resolución para que el PDF no pese de más, y aclara el logo según la intensidad
+    const k = Math.min(1, 1200/Math.max(w,h)), cw = Math.round(w*k), ch = Math.round(h*k);
+    const c = document.createElement("canvas"); c.width = cw; c.height = ch;
+    const g = c.getContext("2d");
+    g.fillStyle = "#fff"; g.fillRect(0,0,cw,ch);
+    g.globalAlpha = WM_STRENGTH; g.drawImage(img, sx, sy, w, h, 0, 0, cw, ch);
+    try{ watermark = { url:c.toDataURL("image/png"), w:cw, h:ch }; }catch(e){ watermark = null; }
+    update();
+  };
+  img.src = CFG.logo;
+})();
+
+/* ---------- Inicio: formulario vacío, los ejemplos van como texto gris ---------- */
+update();
+renderHist();
+</script>
+</body>
+</html>
